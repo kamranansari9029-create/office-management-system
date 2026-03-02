@@ -198,6 +198,33 @@ def init_database():
                 VALUES (?, ?, ?)
             """, demo_holidays)
             
+            # Add demo attendance records for the last 7 days
+            today = date.today()
+            demo_attendance = []
+            for i in range(7):
+                day = today - timedelta(days=i)
+                for emp in ['EMP0001', 'EMP0002', 'EMP0003']:
+                    if i == 0:
+                        status = 'P'
+                    elif i == 1:
+                        status = 'P'
+                    elif i == 2:
+                        status = 'P'
+                    elif i == 3:
+                        status = 'A' if emp == 'EMP0002' else 'P'
+                    elif i == 4:
+                        status = 'P'
+                    elif i == 5:
+                        status = 'H'
+                    else:
+                        status = 'P'
+                    demo_attendance.append((emp, day, status))
+            
+            cursor.executemany("""
+                INSERT INTO attendance (emp_id, curr_date, status)
+                VALUES (?, ?, ?)
+            """, demo_attendance)
+            
             conn.commit()
             print("Demo data initialized successfully!")
         
