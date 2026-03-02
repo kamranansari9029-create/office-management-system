@@ -150,6 +150,41 @@ def init_database():
             )
         """)
         
+        # Poll table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS poll (
+                poll_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                question TEXT NOT NULL,
+                created_by TEXT,
+                is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Poll options table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS poll_option (
+                option_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                poll_id INTEGER,
+                option_text TEXT NOT NULL,
+                FOREIGN KEY (poll_id) REFERENCES poll(poll_id)
+            )
+        """)
+        
+        # Poll votes table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS poll_vote (
+                vote_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                emp_id TEXT,
+                poll_id INTEGER,
+                option_id INTEGER,
+                voted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (poll_id) REFERENCES poll(poll_id),
+                FOREIGN KEY (option_id) REFERENCES poll_option(option_id),
+                UNIQUE(emp_id, poll_id)
+            )
+        """)
+        
         conn.commit()
         
         # Check if demo data exists
