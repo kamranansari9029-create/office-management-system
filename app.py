@@ -6,6 +6,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, date, timedelta
 import database
+import poll_functions
 import hashlib
 import time
 
@@ -390,7 +391,7 @@ def sidebar_navigation():
             st.markdown(f"""<div class="profile-card"><div class="profile-avatar">{initials}</div><h3 style="color: #00d4ff;">{user['emp_name']}</h3><p style="color: {role_color}; font-weight: bold;">{user['post']}</p><p style="color: #808090;">ID: {user['emp_id']}</p></div>""", unsafe_allow_html=True)
         st.markdown("<hr>", unsafe_allow_html=True)
         
-        menu = [("Dashboard", "📊", "dashboard"), ("Employees", "👥", "employees"), ("Attendance", "📅", "attendance"), ("Leave", "🍃", "leave"), ("Projects", "📁", "projects"), ("Tasks", "✅", "tasks"), ("Notices", "📢", "notices"), ("Holiday Calendar", "📅", "holiday"), ("Payslips", "💰", "payslips")] if is_hr() or is_manager() else [("Dashboard", "📊", "dashboard"), ("Attendance", "📅", "attendance"), ("Leave", "🍃", "leave"), ("Projects", "📁", "projects"), ("Tasks", "✅", "tasks"), ("Notices", "📢", "notices"), ("Holiday Calendar", "📅", "holiday"), ("Payslips", "💰", "payslips"), ("Profile", "👤", "profile")]
+        menu = [("Dashboard", "📊", "dashboard"), ("Employees", "👥", "employees"), ("Attendance", "📅", "attendance"), ("Leave", "🍃", "leave"), ("Projects", "📁", "projects"), ("Tasks", "✅", "tasks"), ("Notices", "📢", "notices"), ("Polls", "🗳️", "polls"), ("Holiday Calendar", "📅", "holiday"), ("Payslips", "💰", "payslips")] if is_hr() or is_manager() else [("Dashboard", "📊", "dashboard"), ("Attendance", "📅", "attendance"), ("Leave", "🍃", "leave"), ("Projects", "📁", "projects"), ("Tasks", "✅", "tasks"), ("Notices", "📢", "notices"), ("Polls", "🗳️", "polls"), ("Holiday Calendar", "📅", "holiday"), ("Payslips", "💰", "payslips"), ("Profile", "👤", "profile")]
         
         for item in menu:
             if st.button(f"{item[1]} {item[0]}", use_container_width=True, key=f"nav_{item[2]}"):
@@ -937,6 +938,122 @@ def profile_page():
     st.markdown(f"""<div class="card" style="text-align: center;"><div class="profile-avatar" style="width: 120px; height: 120px; font-size: 48px;">{init}</div><h2 style="color: #00d4ff;">{user['emp_name']}</h2><p style="color: #00ff88; font-weight: bold;">{user['post']}</p><p>ID: {user['emp_id']}</p></div>""", unsafe_allow_html=True)
     st.markdown(f"""<div class="card"><h3>📋 Details</h3><p><strong>Email:</strong> {user['email_id']}</p><p><strong>Phone:</strong> {user['phone_no']}</p><p><strong>Joined:</strong> {user['date_of_join']}</p><p><strong>Salary:</strong> ₹{user['basic']:,}</p></div>""", unsafe_allow_html=True)
 
+def polls_page():
+    user = st.session_state.user
+    st.markdown("""<div style="margin-bottom: 30px;"><h1>🗳️ Polls & Surveys</h1></div>""", unsafe_allow_html=True)
+
+    # Display messages
+    if st.session_state.success_message:
+        st.success(st.session_state.success_message)
+        st.session_state.success_message = None
+    if st.session_state.error_message:
+        st.error(st.session_state.error_message)
+        st.session_state.error_message = None
+
+    # Tabs for viewing and creating polls
+    tabs_list = ["📊 View Polls"]
+    if is_hr() or is_manager():
+        tabs_list.append("➕ Create Poll")
+    
+    view_tab, *create_tab = st.tabs(tabs_list)
+
+    with view_tab:
+        all_polls = poll_functions.get_all_polls()
+
+        if all_polls.empty:
+            st.info("No polls available at the moment. Check back later!")
+        else:
+            for index, poll_row in all_polls.iterrows():
+                poll_id = poll_row['poll_id']
+                with st.container():
+                    st.markdown(f"""<div class="card">""", unsafe_allow_html=True)
+                    
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        st.markdown(f"<h4>{poll_row['question']}</h4>", unsafe_allow_html=True)
+                        st.caption(f"Created by {poll_row['creator_name']} on {pd.to_datetime(poll_row['created_at']).strftime('%b %d, %Y')}")
+                    
+                    if is_hr() or is_manager():
+                        with col2:
+                            if st.button("🗑️ Delete", key=f"del_poll_{poll_id}", use_container_width=True):
+                                if poll_functions.delete_poll(poll_id):
+                                    show_message("Poll deleted successfully!")
+                                    st.rerun()
+                                else:
+                                    show_message("Failed to delete poll.", "error")
+                    
+                    st.markdown("---")
+
+                    has_voted = poll_functions.has_voted(user['emp_id'], poll_id)
+                    poll_data = poll_functions.get_poll_with_options(poll_id)
+
+                    if not poll_data:
+                        st.error("Could not load poll data.")
+                        st.markdown(f"""</div>""", unsafe_allow_html=True)
+                        continue
+
+                    if has_voted:
+                        st.markdown("<h5>Results:</h5>", unsafe_allow_html=True)
+                        user_vote = poll_functions.get_user_vote(user['emp_id'], poll_id)
+                        
+                        total_votes = sum(opt['vote_count'] for opt in poll_data['options'])
+                        
+                        for opt in poll_data['options']:
+                            percentage = (opt['vote_count'] / total_votes * 100) if total_votes > 0 else 0
+                            st.markdown(f"**{opt['option_text']}** ({opt['vote_count']} votes)")
+                            st.progress(percentage / 100)
+                        
+                        if user_vote:
+                            st.info(f"You voted for: **{user_vote['option_text']}**")
+
+                    else:
+                        with st.form(key=f"vote_form_{poll_id}"):
+                            options = poll_data['options']
+                            option_texts = [opt['option_text'] for opt in options]
+                            selected_option_text = st.radio("Choose your option:", option_texts, key=f"radio_{poll_id}", label_visibility="collapsed")
+                            
+                            submitted = st.form_submit_button("🗳️ Vote", use_container_width=True)
+                            if submitted:
+                                selected_option_id = next((opt['option_id'] for opt in options if opt['option_text'] == selected_option_text), None)
+                                
+                                if selected_option_id:
+                                    if poll_functions.vote_poll(user['emp_id'], poll_id, selected_option_id):
+                                        show_message("✅ Your vote has been recorded!")
+                                        st.rerun()
+                                    else:
+                                        show_message("❌ Error recording your vote. You may have already voted.", "error")
+
+                    st.markdown(f"""</div>""", unsafe_allow_html=True)
+                    st.markdown("<br>", unsafe_allow_html=True)
+
+    if is_hr() or is_manager():
+        with create_tab[0]:
+            st.markdown("### Create a New Poll")
+            with st.form(key=f"create_poll_form_{st.session_state.form_key}"):
+                question = st.text_area("Poll Question")
+                options_text = st.text_area("Options (one per line)", height=100, placeholder="Option 1\nOption 2\nOption 3")
+                
+                submitted = st.form_submit_button("➕ Create Poll", use_container_width=True)
+                if submitted:
+                    options = [opt.strip() for opt in options_text.split('\n') if opt.strip()]
+                    if not question:
+                        show_message("⚠️ Poll question cannot be empty.", "error")
+                    elif len(options) < 2:
+                        show_message("⚠️ Please provide at least two options.", "error")
+                    else:
+                        poll_id = poll_functions.create_poll(question, options, user['emp_id'])
+                        if poll_id:
+                            show_message("✅ Poll created successfully!")
+                            all_employees = database.get_all_employees()
+                            notification_msg = f"New poll posted: '{question[:50]}...'"
+                            for _, emp in all_employees.iterrows():
+                                if emp['emp_id'] != user['emp_id']:
+                                    database.add_notification(emp['emp_id'], notification_msg)
+                            clear_form()
+                            st.rerun()
+                        else:
+                            show_message("❌ Failed to create poll.", "error")
+
 def main():
     # Display persistent messages at the top
     if st.session_state.success_message:
@@ -963,6 +1080,7 @@ def main():
         elif page == 'profile': profile_page()
         elif page == 'payslips': payslips_page()
         elif page == 'holiday': holiday_page()
+        elif page == 'polls': polls_page()
         else: dashboard_page()
 
 if __name__ == '__main__': main()
