@@ -206,7 +206,7 @@ def employees_page():
         st.error(st.session_state.error_message)
         st.session_state.error_message = None
     
-    tab1, tab2, tab3 = st.tabs(["📋 View", "➕ Add", "📊 Stats"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📋 View", "➕ Add", "✏️ Update", "📊 Stats"])
     emp_df = database.get_all_employees()
     
     with tab1:
@@ -249,6 +249,45 @@ def employees_page():
                     show_message("⚠️ Please fill all required fields!", "error")
     
     with tab3:
+        if not emp_df.empty:
+            update_sel = st.selectbox("Select Employee to Update", ["Select..."] + emp_df['emp_name'].tolist(), key="update_emp_select")
+            
+            if update_sel and update_sel != "Select...":
+                e = emp_df[emp_df['emp_name'] == update_sel].iloc[0]
+                
+                st.markdown("---")
+                st.markdown(f"### ✏️ Update: {e['emp_name']}")
+                
+                form_key = st.session_state.form_key
+                with st.form(f"update_emp_{form_key}"):
+                    c1, c2 = st.columns(2)
+                    with c1: 
+                        upd_emp_id = e['emp_id']
+                        st.markdown(f"<p style='color: #808090;'>ID: {upd_emp_id}</p>", unsafe_allow_html=True)
+                        upd_name = st.text_input("Name", value=e['emp_name'])
+                        upd_email = st.text_input("Email", value=e['email_id'] if e['email_id'] else "")
+                    with c2: 
+                        upd_phone = st.text_input("Phone", value=e['phone_no'] if e['phone_no'] else "")
+                        upd_post = st.selectbox("Post", ["Employee", "Manager", "HR"], index=["Employee", "Manager", "HR"].index(e['post']) if e['post'] in ["Employee", "Manager", "HR"] else 0)
+                        upd_basic = st.number_input("Salary", 0, 200000, value=int(e['basic']) if e['basic'] else 0)
+                    
+                    upd_address = st.text_input("Address", value=e['address'] if e['address'] else "")
+                    
+                    if st.form_submit_button("💾 Update Employee", use_container_width=True):
+                        if upd_name and upd_phone:
+                            if database.update_employee(upd_emp_id, upd_name, upd_email, upd_address, upd_phone, upd_post, upd_basic):
+                                show_message(f"✅ Employee '{upd_name}' updated successfully!")
+                                database.add_notification(upd_emp_id, f"Your profile has been updated.")
+                                clear_form()
+                                st.rerun()
+                            else:
+                                show_message("❌ Failed to update employee!", "error")
+                        else:
+                            show_message("⚠️ Please fill required fields!", "error")
+            else:
+                st.info("Please select an employee to update their details.")
+    
+    with tab4:
         if not emp_df.empty:
             c1, c2 = st.columns(2)
             with c1: st.bar_chart(emp_df['post'].value_counts())
