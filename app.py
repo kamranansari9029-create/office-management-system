@@ -846,6 +846,17 @@ def leave_page():
                 if st.form_submit_button("🚀 Submit Request", use_container_width=True):
                     if reason:
                         if database.add_leave_request(user['emp_id'], sd, ed, reason): 
+                            # Get employee name for notification
+                            emp_info = database.get_employee_by_id(user['emp_id'])
+                            emp_name = emp_info['emp_name'] if emp_info else user['emp_id']
+                            
+                            # Notify all HR and Managers about the new leave request
+                            all_employees = database.get_all_employees()
+                            for _, emp in all_employees.iterrows():
+                                if emp['post'] in ['HR', 'Manager']:
+                                    notification_msg = f"🍃 New Leave Request: {emp_name} applied for leave from {sd} to {ed}"
+                                    database.add_notification(emp['emp_id'], notification_msg)
+                            
                             show_message(f"✅ Leave request submitted from {sd} to {ed}!")
                             clear_form()
                             st.rerun()
