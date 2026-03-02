@@ -1,33 +1,212 @@
 """
 Database Operations for Office Management System
+Using SQLite for Streamlit Cloud Deployment
 """
-import mysql.connector
-from mysql.connector import Error
-from config import DB_CONFIG
+import sqlite3
 import pandas as pd
 from datetime import datetime, date, timedelta
 import hashlib
+import os
+from config import DB_CONFIG
 
 
 def get_connection():
     """Create and return a database connection"""
     try:
-        # Try with default authentication first
-        conn = mysql.connector.connect(**DB_CONFIG)
+        conn = sqlite3.connect(DB_CONFIG['database'])
+        conn.row_factory = sqlite3.Row
         return conn
-    except Error as e:
-        # If failed, try with different authentication method
-        print(f"Error connecting to MySQL: {e}")
-        try:
-            # Try with mysql_native_password authentication
-            conn = mysql.connector.connect(
-                **DB_CONFIG,
-                auth_plugin='mysql_native_password'
+    except Exception as e:
+        print(f"Error connecting to SQLite: {e}")
+        return None
+
+
+def init_database():
+    """Initialize database with all tables and demo data"""
+    conn = get_connection()
+    if conn is None:
+        return False
+    
+    try:
+        cursor = conn.cursor()
+        
+        # Employee table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS employee (
+                emp_id TEXT PRIMARY KEY,
+                emp_name TEXT NOT NULL,
+                email_id TEXT,
+                address TEXT,
+                phone_no TEXT,
+                post TEXT,
+                password TEXT,
+                date_of_join DATE,
+                basic REAL
             )
-            return conn
-        except Error as e2:
-            print(f"Error connecting to MySQL (attempt 2): {e2}")
-            return None
+        """)
+        
+        # Attendance table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS attendance (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                emp_id TEXT NOT NULL,
+                curr_date DATE NOT NULL,
+                status TEXT,
+                UNIQUE(emp_id, curr_date)
+            )
+        """)
+        
+        # Notice table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notice (
+                notice_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                notice TEXT,
+                time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Project table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS project (
+                project_id TEXT PRIMARY KEY,
+                project_name TEXT,
+                description TEXT,
+                starting_date DATE,
+                ending_date DATE,
+                status TEXT,
+                progression REAL
+            )
+        """)
+        
+        # Task table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS task (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id TEXT,
+                emp_id TEXT,
+                role TEXT
+            )
+        """)
+        
+        # Leave request table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS leave_request (
+                request_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                emp_id TEXT,
+                start_date DATE,
+                end_date DATE,
+                reason TEXT,
+                status TEXT DEFAULT 'Pending',
+                request_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Notification table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notification (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                emp_id TEXT,
+                message TEXT,
+                is_read INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Holiday table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS holiday (
+                holiday_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                holiday_name TEXT,
+                holiday_date DATE,
+                description TEXT
+            )
+        """)
+        
+        # Payslip table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS payslip (
+                payslip_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                emp_id TEXT,
+                month INTEGER,
+                year INTEGER,
+                basic_salary REAL,
+                unpaid_leaves INTEGER,
+                absences INTEGER,
+                holidays INTEGER,
+                deduction_amount REAL,
+                net_salary REAL,
+                generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Project document table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS project_document (
+                doc_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id TEXT,
+                file_name TEXT,
+                file_data BLOB,
+                upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        conn.commit()
+        
+        # Check if demo data exists
+        cursor.execute("SELECT COUNT(*) FROM employee")
+        if cursor.fetchone()[0] == 0:
+            # Add demo employees
+            demo_employees = [
+                ('EMP0001', 'Raju', 'EMP0001@company.com', '', '1234567890', 'HR', 'RAJU0001', date.today(), 50000),
+                ('EMP0002', 'Saikumar', 'EMP0002@company.com', '', '1234567891', 'Employee', 'SAIK0002', date.today(), 30000),
+                ('EMP0003', 'Arpit', 'EMP0003@company.com', '', '1234567892', 'Manager', 'ARPI0003', date.today(), 45000),
+            ]
+            cursor.executemany("""
+                INSERT INTO employee (emp_id, emp_name, email_id, address, phone_no, post, password, date_of_join, basic)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, demo_employees)
+            
+            # Add demo projects
+            demo_projects = [
+                ('PROJ001', 'Website Redesign', 'Redesign company website with new branding', date.today(), date.today() + timedelta(days=60), 'In Progress', 45),
+                ('PROJ002', 'Mobile App Development', 'Develop customer mobile application', date.today(), date.today() + timedelta(days=90), 'Not Started', 0),
+                ('PROJ003', 'Database Migration', 'Migrate legacy database to new system', date.today() - timedelta(days=30), date.today() + timedelta(days=30), 'In Progress', 70),
+            ]
+            cursor.executemany("""
+                INSERT INTO project (project_id, project_name, description, starting_date, ending_date, status, progression)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, demo_projects)
+            
+            # Add demo notices
+            demo_notices = [
+                ('Office will remain closed on Diwali'),
+                ('New attendance policy effective from next month'),
+                ('Team meeting scheduled for Friday at 3 PM'),
+            ]
+            for notice in demo_notices:
+                cursor.execute("INSERT INTO notice (notice) VALUES (?)", (notice,))
+            
+            # Add demo holidays
+            demo_holidays = [
+                ('Republic Day', date(2026, 1, 26), 'National Holiday'),
+                ('Independence Day', date(2026, 8, 15), 'National Holiday'),
+                ('Diwali', date(2026, 10, 20), 'Festival'),
+                ('Christmas', date(2026, 12, 25), 'Festival'),
+            ]
+            cursor.executemany("""
+                INSERT INTO holiday (holiday_name, holiday_date, description)
+                VALUES (?, ?, ?)
+            """, demo_holidays)
+            
+            conn.commit()
+            print("Demo data initialized successfully!")
+        
+        cursor.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Error initializing database: {e}")
+        return False
 
 
 def hash_password(password):
@@ -37,27 +216,28 @@ def hash_password(password):
 
 def authenticate_user(emp_id, password):
     """Authenticate user with emp_id and password"""
+    # Initialize database if needed
+    init_database()
+    
     conn = get_connection()
     if conn is None:
         return None
     
     try:
-        cursor = conn.cursor(dictionary=True)
-        # First try with plain password (for existing users)
-        query = "SELECT * FROM employee WHERE emp_id = %s AND password = %s"
-        cursor.execute(query, (emp_id, password))
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM employee WHERE emp_id = ?", (emp_id,))
         user = cursor.fetchone()
         
-        # If not found, try with hashed password
-        if user is None:
-            hashed_pw = hash_password(password)
-            cursor.execute(query, (emp_id, hashed_pw))
-            user = cursor.fetchone()
+        if user:
+            # Check both plain password and hashed password
+            if user['password'] == password or user['password'] == hash_password(password):
+                conn.close()
+                return dict(user)
         
         cursor.close()
         conn.close()
-        return user
-    except Error as e:
+        return None
+    except Exception as e:
         print(f"Error authenticating user: {e}")
         return None
 
@@ -71,13 +251,12 @@ def update_password(emp_id, new_password):
     try:
         cursor = conn.cursor()
         hashed_pw = hash_password(new_password)
-        query = "UPDATE employee SET password = %s WHERE emp_id = %s"
-        cursor.execute(query, (hashed_pw, emp_id))
+        cursor.execute("UPDATE employee SET password = ? WHERE emp_id = ?", (hashed_pw, emp_id))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error updating password: {e}")
         return False
 
@@ -89,30 +268,29 @@ def get_employee_by_id(emp_id):
         return None
     
     try:
-        cursor = conn.cursor(dictionary=True)
-        query = "SELECT * FROM employee WHERE emp_id = %s"
-        cursor.execute(query, (emp_id,))
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM employee WHERE emp_id = ?", (emp_id,))
         employee = cursor.fetchone()
         cursor.close()
         conn.close()
-        return employee
-    except Error as e:
+        return dict(employee) if employee else None
+    except Exception as e:
         print(f"Error fetching employee: {e}")
         return None
 
 
 def get_all_employees():
     """Get all employees"""
+    init_database()
     conn = get_connection()
     if conn is None:
         return pd.DataFrame()
     
     try:
-        query = "SELECT * FROM employee ORDER BY emp_id"
-        df = pd.read_sql(query, conn)
+        df = pd.read_sql("SELECT * FROM employee ORDER BY emp_id", conn)
         conn.close()
         return df
-    except Error as e:
+    except Exception as e:
         print(f"Error fetching employees: {e}")
         return pd.DataFrame()
 
@@ -125,15 +303,15 @@ def add_employee(emp_id, emp_name, email_id, address, phone_no, post, password, 
     
     try:
         cursor = conn.cursor()
-        query = """INSERT INTO employee 
-                   (emp_id, emp_name, email_id, address, phone_no, post, password, date_of_join, basic) 
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"""
-        cursor.execute(query, (emp_id, emp_name, email_id, address, phone_no, post, password, date_of_join, basic))
+        cursor.execute("""
+            INSERT INTO employee (emp_id, emp_name, email_id, address, phone_no, post, password, date_of_join, basic)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (emp_id, emp_name, email_id, address, phone_no, post, password, date_of_join, basic))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error adding employee: {e}")
         return False
 
@@ -146,15 +324,16 @@ def update_employee(emp_id, emp_name, email_id, address, phone_no, post, basic):
     
     try:
         cursor = conn.cursor()
-        query = """UPDATE employee 
-                   SET emp_name=%s, email_id=%s, address=%s, phone_no=%s, post=%s, basic=%s 
-                   WHERE emp_id=%s"""
-        cursor.execute(query, (emp_name, email_id, address, phone_no, post, basic, emp_id))
+        cursor.execute("""
+            UPDATE employee 
+            SET emp_name=?, email_id=?, address=?, phone_no=?, post=?, basic=?
+            WHERE emp_id=?
+        """, (emp_name, email_id, address, phone_no, post, basic, emp_id))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error updating employee: {e}")
         return False
 
@@ -167,13 +346,12 @@ def delete_employee(emp_id):
     
     try:
         cursor = conn.cursor()
-        query = "DELETE FROM employee WHERE emp_id = %s"
-        cursor.execute(query, (emp_id,))
+        cursor.execute("DELETE FROM employee WHERE emp_id = ?", (emp_id,))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error deleting employee: {e}")
         return False
 
@@ -190,13 +368,13 @@ def get_attendance_records(emp_id=None, start_date=None, end_date=None):
         params = []
         
         if emp_id:
-            conditions.append("emp_id = %s")
+            conditions.append("emp_id = ?")
             params.append(emp_id)
         if start_date:
-            conditions.append("curr_date >= %s")
+            conditions.append("curr_date >= ?")
             params.append(start_date)
         if end_date:
-            conditions.append("curr_date <= %s")
+            conditions.append("curr_date <= ?")
             params.append(end_date)
         
         if conditions:
@@ -207,7 +385,7 @@ def get_attendance_records(emp_id=None, start_date=None, end_date=None):
         df = pd.read_sql(query, conn, params=params if params else None)
         conn.close()
         return df
-    except Error as e:
+    except Exception as e:
         print(f"Error fetching attendance: {e}")
         return pd.DataFrame()
 
@@ -220,15 +398,15 @@ def mark_attendance(emp_id, curr_date, status):
     
     try:
         cursor = conn.cursor()
-        query = """INSERT INTO attendance (emp_id, curr_date, status) 
-                   VALUES (%s, %s, %s) 
-                   ON DUPLICATE KEY UPDATE status = %s"""
-        cursor.execute(query, (emp_id, curr_date, status, status))
+        cursor.execute("""
+            INSERT OR REPLACE INTO attendance (emp_id, curr_date, status) 
+            VALUES (?, ?, ?)
+        """, (emp_id, curr_date, status))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error marking attendance: {e}")
         return False
 
@@ -247,20 +425,20 @@ def get_attendance_summary(emp_id=None, month=None, year=None):
                 SUM(CASE WHEN status = 'P' THEN 1 ELSE 0 END) as present,
                 SUM(CASE WHEN status = 'A' THEN 1 ELSE 0 END) as absent,
                 SUM(CASE WHEN status = 'H' THEN 1 ELSE 0 END) as holiday,
-                SUM(CASE WHEN status = 'L' THEN 1 ELSE 0 END) as `leave`
+                SUM(CASE WHEN status = 'L' THEN 1 ELSE 0 END) as leave
             FROM attendance
         """
         conditions = []
         params = []
         
         if emp_id:
-            conditions.append("emp_id = %s")
+            conditions.append("emp_id = ?")
             params.append(emp_id)
         if month and year:
-            conditions.append("MONTH(curr_date) = %s")
-            params.append(month)
-            conditions.append("YEAR(curr_date) = %s")
-            params.append(year)
+            conditions.append("strftime('%m', curr_date) = ?")
+            params.append(f"{month:02d}")
+            conditions.append("strftime('%Y', curr_date) = ?")
+            params.append(str(year))
         
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
@@ -270,7 +448,7 @@ def get_attendance_summary(emp_id=None, month=None, year=None):
         df = pd.read_sql(query, conn, params=params if params else None)
         conn.close()
         return df
-    except Error as e:
+    except Exception as e:
         print(f"Error fetching attendance summary: {e}")
         return pd.DataFrame()
 
@@ -290,7 +468,7 @@ def get_attendance_trend(days=7):
                    SUM(CASE WHEN status = 'P' THEN 1 ELSE 0 END) as present,
                    SUM(CASE WHEN status = 'A' THEN 1 ELSE 0 END) as absent
             FROM attendance 
-            WHERE curr_date BETWEEN %s AND %s
+            WHERE curr_date BETWEEN ? AND ?
             GROUP BY curr_date
             ORDER BY curr_date
         """
@@ -303,7 +481,7 @@ def get_attendance_trend(days=7):
             df['absent'] = pd.to_numeric(df['absent']).fillna(0).astype(int)
             
         return df
-    except Error as e:
+    except Exception as e:
         print(f"Error fetching attendance trend: {e}")
         return pd.DataFrame()
 
@@ -315,11 +493,10 @@ def get_all_notices():
         return pd.DataFrame()
     
     try:
-        query = "SELECT * FROM notice ORDER BY time DESC"
-        df = pd.read_sql(query, conn)
+        df = pd.read_sql("SELECT * FROM notice ORDER BY time DESC", conn)
         conn.close()
         return df
-    except Error as e:
+    except Exception as e:
         print(f"Error fetching notices: {e}")
         return pd.DataFrame()
 
@@ -333,18 +510,8 @@ def add_notice(notice_text):
     try:
         cursor = conn.cursor()
         
-        # Ensure notification table exists
-        cursor.execute("""CREATE TABLE IF NOT EXISTS notification (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            emp_id VARCHAR(50),
-            message TEXT,
-            is_read BOOLEAN DEFAULT FALSE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )""")
-        
         # Insert the notice
-        query = "INSERT INTO notice (notice) VALUES (%s)"
-        cursor.execute(query, (notice_text,))
+        cursor.execute("INSERT INTO notice (notice) VALUES (?)", (notice_text,))
         conn.commit()
         
         # Get all employees to send notifications
@@ -357,13 +524,13 @@ def add_notice(notice_text):
         
         # Send notification to all employees
         for emp in employees:
-            cursor.execute("INSERT INTO notification (emp_id, message) VALUES (%s, %s)", (emp[0], notification_msg))
+            cursor.execute("INSERT INTO notification (emp_id, message) VALUES (?, ?)", (emp[0], notification_msg))
         
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error adding notice: {e}")
         return False
 
@@ -376,13 +543,12 @@ def delete_notice(notice_id):
     
     try:
         cursor = conn.cursor()
-        query = "DELETE FROM notice WHERE notice_id = %s"
-        cursor.execute(query, (notice_id,))
+        cursor.execute("DELETE FROM notice WHERE notice_id = ?", (notice_id,))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error deleting notice: {e}")
         return False
 
@@ -394,11 +560,10 @@ def get_all_projects():
         return pd.DataFrame()
     
     try:
-        query = "SELECT * FROM project ORDER BY starting_date DESC"
-        df = pd.read_sql(query, conn)
+        df = pd.read_sql("SELECT * FROM project ORDER BY starting_date DESC", conn)
         conn.close()
         return df
-    except Error as e:
+    except Exception as e:
         print(f"Error fetching projects: {e}")
         return pd.DataFrame()
 
@@ -411,15 +576,15 @@ def add_project(project_id, project_name, description, starting_date, ending_dat
     
     try:
         cursor = conn.cursor()
-        query = """INSERT INTO project 
-                   (project_id, project_name, description, starting_date, ending_date) 
-                   VALUES (%s, %s, %s, %s, %s)"""
-        cursor.execute(query, (project_id, project_name, description, starting_date, ending_date))
+        cursor.execute("""
+            INSERT INTO project (project_id, project_name, description, starting_date, ending_date, status, progression)
+            VALUES (?, ?, ?, ?, ?, 'Not Started', 0)
+        """, (project_id, project_name, description, starting_date, ending_date))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error adding project: {e}")
         return False
 
@@ -432,15 +597,16 @@ def update_project(project_id, project_name, description, status, progression):
     
     try:
         cursor = conn.cursor()
-        query = """UPDATE project 
-                   SET project_name=%s, description=%s, status=%s, progression=%s 
-                   WHERE project_id=%s"""
-        cursor.execute(query, (project_name, description, status, progression, project_id))
+        cursor.execute("""
+            UPDATE project 
+            SET project_name=?, description=?, status=?, progression=?
+            WHERE project_id=?
+        """, (project_name, description, status, progression, project_id))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error updating project: {e}")
         return False
 
@@ -453,13 +619,12 @@ def delete_project(project_id):
     
     try:
         cursor = conn.cursor()
-        query = "DELETE FROM project WHERE project_id = %s"
-        cursor.execute(query, (project_id,))
+        cursor.execute("DELETE FROM project WHERE project_id = ?", (project_id,))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error deleting project: {e}")
         return False
 
@@ -479,7 +644,7 @@ def get_all_tasks():
         df = pd.read_sql(query, conn)
         conn.close()
         return df
-    except Error as e:
+    except Exception as e:
         print(f"Error fetching tasks: {e}")
         return pd.DataFrame()
 
@@ -495,12 +660,12 @@ def get_tasks_by_employee(emp_id):
                    FROM task t 
                    JOIN project p ON t.project_id = p.project_id 
                    JOIN employee e ON t.emp_id = e.emp_id 
-                   WHERE t.emp_id = %s
+                   WHERE t.emp_id = ?
                    ORDER BY t.project_id"""
         df = pd.read_sql(query, conn, params=(emp_id,))
         conn.close()
         return df
-    except Error as e:
+    except Exception as e:
         print(f"Error fetching employee tasks: {e}")
         return pd.DataFrame()
 
@@ -513,13 +678,13 @@ def add_task(project_id, emp_id, role):
     
     try:
         cursor = conn.cursor()
-        query = "INSERT INTO task (project_id, emp_id, role) VALUES (%s, %s, %s)"
-        cursor.execute(query, (project_id, emp_id, role))
+        cursor.execute("INSERT INTO task (project_id, emp_id, role) VALUES (?, ?, ?)", 
+                      (project_id, emp_id, role))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error adding task: {e}")
         return False
 
@@ -532,13 +697,12 @@ def delete_task(project_id, emp_id):
     
     try:
         cursor = conn.cursor()
-        query = "DELETE FROM task WHERE project_id = %s AND emp_id = %s"
-        cursor.execute(query, (project_id, emp_id))
+        cursor.execute("DELETE FROM task WHERE project_id = ? AND emp_id = ?", (project_id, emp_id))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error deleting task: {e}")
         return False
 
@@ -550,46 +714,44 @@ def get_managers():
         return pd.DataFrame()
     
     try:
-        query = "SELECT * FROM employee WHERE post = 'Manager'"
-        df = pd.read_sql(query, conn)
+        df = pd.read_sql("SELECT * FROM employee WHERE post = 'Manager'", conn)
         conn.close()
         return df
-    except Error as e:
+    except Exception as e:
         print(f"Error fetching managers: {e}")
         return pd.DataFrame()
 
 
 def get_employees_list():
-    """Get all non-manager employees"""
+    """Get all non-HR employees"""
     conn = get_connection()
     if conn is None:
         return pd.DataFrame()
     
     try:
-        query = "SELECT * FROM employee WHERE post != 'HR'"
-        df = pd.read_sql(query, conn)
+        df = pd.read_sql("SELECT * FROM employee WHERE post != 'HR'", conn)
         conn.close()
         return df
-    except Error as e:
+    except Exception as e:
         print(f"Error fetching employees: {e}")
         return pd.DataFrame()
 
 
 def update_project_status_by_employee(project_id, status, progression):
-    """Update project status by employee (only updates status and progression)"""
+    """Update project status by employee"""
     conn = get_connection()
     if conn is None:
         return False
     
     try:
         cursor = conn.cursor()
-        query = """UPDATE project SET status=%s, progression=%s WHERE project_id=%s"""
-        cursor.execute(query, (status, progression, project_id))
+        cursor.execute("UPDATE project SET status=?, progression=? WHERE project_id=?", 
+                      (status, progression, project_id))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error updating project status: {e}")
         return False
 
@@ -603,11 +765,11 @@ def get_projects_by_employee(emp_id):
     try:
         query = """SELECT DISTINCT p.* FROM project p 
                    JOIN task t ON p.project_id = t.project_id 
-                   WHERE t.emp_id = %s"""
+                   WHERE t.emp_id = ?"""
         df = pd.read_sql(query, conn, params=(emp_id,))
         conn.close()
         return df
-    except Error as e:
+    except Exception as e:
         print(f"Error fetching employee projects: {e}")
         return pd.DataFrame()
 
@@ -620,24 +782,15 @@ def add_leave_request(emp_id, start_date, end_date, reason):
     
     try:
         cursor = conn.cursor()
-        # Ensure table exists
-        cursor.execute("""CREATE TABLE IF NOT EXISTS leave_request (
-            request_id INT AUTO_INCREMENT PRIMARY KEY,
-            emp_id VARCHAR(50),
-            start_date DATE,
-            end_date DATE,
-            reason TEXT,
-            status VARCHAR(20) DEFAULT 'Pending',
-            request_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )""")
-        
-        query = "INSERT INTO leave_request (emp_id, start_date, end_date, reason) VALUES (%s, %s, %s, %s)"
-        cursor.execute(query, (emp_id, start_date, end_date, reason))
+        cursor.execute("""
+            INSERT INTO leave_request (emp_id, start_date, end_date, reason)
+            VALUES (?, ?, ?, ?)
+        """, (emp_id, start_date, end_date, reason))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error adding leave request: {e}")
         return False
 
@@ -649,19 +802,6 @@ def get_all_leave_requests():
         return pd.DataFrame()
     
     try:
-        cursor = conn.cursor()
-        cursor.execute("""CREATE TABLE IF NOT EXISTS leave_request (
-            request_id INT AUTO_INCREMENT PRIMARY KEY,
-            emp_id VARCHAR(50),
-            start_date DATE,
-            end_date DATE,
-            reason TEXT,
-            status VARCHAR(20) DEFAULT 'Pending',
-            request_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )""")
-        conn.commit()
-        cursor.close()
-
         query = """SELECT l.*, e.emp_name 
                    FROM leave_request l 
                    LEFT JOIN employee e ON l.emp_id = e.emp_id 
@@ -669,7 +809,7 @@ def get_all_leave_requests():
         df = pd.read_sql(query, conn)
         conn.close()
         return df
-    except Error as e:
+    except Exception as e:
         print(f"Error fetching leave requests: {e}")
         return pd.DataFrame()
 
@@ -681,24 +821,11 @@ def get_employee_leave_requests(emp_id):
         return pd.DataFrame()
     
     try:
-        cursor = conn.cursor()
-        cursor.execute("""CREATE TABLE IF NOT EXISTS leave_request (
-            request_id INT AUTO_INCREMENT PRIMARY KEY,
-            emp_id VARCHAR(50),
-            start_date DATE,
-            end_date DATE,
-            reason TEXT,
-            status VARCHAR(20) DEFAULT 'Pending',
-            request_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )""")
-        conn.commit()
-        cursor.close()
-
-        query = "SELECT * FROM leave_request WHERE emp_id = %s ORDER BY request_date DESC"
+        query = "SELECT * FROM leave_request WHERE emp_id = ? ORDER BY request_date DESC"
         df = pd.read_sql(query, conn, params=(emp_id,))
         conn.close()
         return df
-    except Error as e:
+    except Exception as e:
         print(f"Error fetching employee leave requests: {e}")
         return pd.DataFrame()
 
@@ -711,21 +838,12 @@ def add_notification(emp_id, message):
     
     try:
         cursor = conn.cursor()
-        cursor.execute("""CREATE TABLE IF NOT EXISTS notification (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            emp_id VARCHAR(50),
-            message TEXT,
-            is_read BOOLEAN DEFAULT FALSE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )""")
-        
-        query = "INSERT INTO notification (emp_id, message) VALUES (%s, %s)"
-        cursor.execute(query, (emp_id, message))
+        cursor.execute("INSERT INTO notification (emp_id, message) VALUES (?, ?)", (emp_id, message))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error adding notification: {e}")
         return False
 
@@ -737,23 +855,11 @@ def get_user_notifications(emp_id):
         return pd.DataFrame()
     
     try:
-        # Ensure table exists
-        cursor = conn.cursor()
-        cursor.execute("""CREATE TABLE IF NOT EXISTS notification (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            emp_id VARCHAR(50),
-            message TEXT,
-            is_read BOOLEAN DEFAULT FALSE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )""")
-        conn.commit()
-        cursor.close()
-
-        query = "SELECT * FROM notification WHERE emp_id = %s AND is_read = FALSE ORDER BY created_at DESC"
+        query = "SELECT * FROM notification WHERE emp_id = ? AND is_read = 0 ORDER BY created_at DESC"
         df = pd.read_sql(query, conn, params=(emp_id,))
         conn.close()
         return df
-    except Error as e:
+    except Exception as e:
         print(f"Error fetching notifications: {e}")
         return pd.DataFrame()
 
@@ -766,13 +872,12 @@ def mark_notification_read(notification_id):
     
     try:
         cursor = conn.cursor()
-        query = "UPDATE notification SET is_read = TRUE WHERE id = %s"
-        cursor.execute(query, (notification_id,))
+        cursor.execute("UPDATE notification SET is_read = 1 WHERE id = ?", (notification_id,))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error marking notification read: {e}")
         return False
 
@@ -785,13 +890,12 @@ def delete_notification(notification_id):
     
     try:
         cursor = conn.cursor()
-        query = "DELETE FROM notification WHERE id = %s"
-        cursor.execute(query, (notification_id,))
+        cursor.execute("DELETE FROM notification WHERE id = ?", (notification_id,))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error deleting notification: {e}")
         return False
 
@@ -806,25 +910,23 @@ def update_leave_status(request_id, status):
         cursor = conn.cursor()
         
         # Get emp_id to notify
-        cursor.execute("SELECT emp_id FROM leave_request WHERE request_id = %s", (request_id,))
+        cursor.execute("SELECT emp_id FROM leave_request WHERE request_id = ?", (request_id,))
         result = cursor.fetchone()
         
-        query = "UPDATE leave_request SET status = %s WHERE request_id = %s"
-        cursor.execute(query, (status, request_id))
+        cursor.execute("UPDATE leave_request SET status = ? WHERE request_id = ?", (status, request_id))
         conn.commit()
         cursor.close()
-        conn.close()
         
         if result:
-            # Create more descriptive notification message
+            # Create notification message
             if status == 'Approved':
-                notification_msg = f"Your leave request has been APPROVED!"
+                notification_msg = "Your leave request has been APPROVED!"
             else:
-                notification_msg = f"Your leave request has been REJECTED."
+                notification_msg = "Your leave request has been REJECTED."
             add_notification(result[0], notification_msg)
             
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error updating leave status: {e}")
         return False
 
@@ -832,25 +934,19 @@ def update_leave_status(request_id, status):
 def upload_project_document(project_id, file_name, file_data):
     """Upload a document for a project"""
     conn = get_connection()
-    if conn is None: return False
+    if conn is None:
+        return False
     try:
         cursor = conn.cursor()
-        cursor.execute("""CREATE TABLE IF NOT EXISTS project_document (
-            doc_id INT AUTO_INCREMENT PRIMARY KEY,
-            project_id VARCHAR(50),
-            file_name VARCHAR(255),
-            file_data LONGBLOB,
-            upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (project_id) REFERENCES project(project_id) ON DELETE CASCADE
-        )""")
-        
-        query = "INSERT INTO project_document (project_id, file_name, file_data) VALUES (%s, %s, %s)"
-        cursor.execute(query, (project_id, file_name, file_data))
+        cursor.execute("""
+            INSERT INTO project_document (project_id, file_name, file_data)
+            VALUES (?, ?, ?)
+        """, (project_id, file_name, file_data))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error uploading document: {e}")
         return False
 
@@ -858,26 +954,14 @@ def upload_project_document(project_id, file_name, file_data):
 def get_project_documents(project_id):
     """Get metadata of documents for a project"""
     conn = get_connection()
-    if conn is None: return pd.DataFrame()
+    if conn is None:
+        return pd.DataFrame()
     try:
-        # Ensure table exists
-        cursor = conn.cursor()
-        cursor.execute("""CREATE TABLE IF NOT EXISTS project_document (
-            doc_id INT AUTO_INCREMENT PRIMARY KEY,
-            project_id VARCHAR(50),
-            file_name VARCHAR(255),
-            file_data LONGBLOB,
-            upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (project_id) REFERENCES project(project_id) ON DELETE CASCADE
-        )""")
-        conn.commit()
-        cursor.close()
-        
-        query = "SELECT doc_id, project_id, file_name, upload_date FROM project_document WHERE project_id = %s ORDER BY upload_date DESC"
+        query = "SELECT doc_id, project_id, file_name, upload_date FROM project_document WHERE project_id = ? ORDER BY upload_date DESC"
         df = pd.read_sql(query, conn, params=(project_id,))
         conn.close()
         return df
-    except Error as e:
+    except Exception as e:
         print(f"Error fetching documents: {e}")
         return pd.DataFrame()
 
@@ -885,16 +969,17 @@ def get_project_documents(project_id):
 def get_document_content(doc_id):
     """Get specific document content"""
     conn = get_connection()
-    if conn is None: return None
+    if conn is None:
+        return None
     try:
         cursor = conn.cursor()
-        query = "SELECT file_name, file_data FROM project_document WHERE doc_id = %s"
+        query = "SELECT file_name, file_data FROM project_document WHERE doc_id = ?"
         cursor.execute(query, (doc_id,))
         result = cursor.fetchone()
         cursor.close()
         conn.close()
         return result
-    except Error as e:
+    except Exception as e:
         print(f"Error fetching document content: {e}")
         return None
 
@@ -902,16 +987,16 @@ def get_document_content(doc_id):
 def delete_project_document(doc_id):
     """Delete a project document"""
     conn = get_connection()
-    if conn is None: return False
+    if conn is None:
+        return False
     try:
         cursor = conn.cursor()
-        query = "DELETE FROM project_document WHERE doc_id = %s"
-        cursor.execute(query, (doc_id,))
+        cursor.execute("DELETE FROM project_document WHERE doc_id = ?", (doc_id,))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error deleting document: {e}")
         return False
 
@@ -919,23 +1004,22 @@ def delete_project_document(doc_id):
 # ====== Payslip & Salary Deduction Functions ======
 
 def calculate_monthly_deductions(emp_id, month, year):
-    """Calculate deductions for unpaid leaves and absences in a month (excludes holidays)"""
+    """Calculate deductions for unpaid leaves and absences in a month"""
     conn = get_connection()
     if conn is None:
         return {'unpaid_leaves': 0, 'absences': 0, 'total_deduction': 0, 'holidays': 0}
     
     try:
-        from calendar import monthrange
-        total_days = monthrange(year, month)[1]
+        import calendar
+        total_days = calendar.monthrange(year, month)[1]
         
-        # Get attendance records for the month
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor()
         cursor.execute("""
             SELECT status, COUNT(*) as count 
             FROM attendance 
-            WHERE emp_id = %s AND MONTH(curr_date) = %s AND YEAR(curr_date) = %s
+            WHERE emp_id = ? AND strftime('%m', curr_date) = ? AND strftime('%Y', curr_date) = ?
             GROUP BY status
-        """, (emp_id, month, year))
+        """, (emp_id, f"{month:02d}", str(year)))
         records = cursor.fetchall()
         
         unpaid_leaves = 0
@@ -943,19 +1027,18 @@ def calculate_monthly_deductions(emp_id, month, year):
         holidays = 0
         
         for record in records:
-            if record['status'] == 'L':
-                unpaid_leaves += record['count']
-            elif record['status'] == 'A':
-                absences += record['count']
-            elif record['status'] == 'H':
-                holidays += record['count']
+            if record[0] == 'L':
+                unpaid_leaves += record[1]
+            elif record[0] == 'A':
+                absences += record[1]
+            elif record[0] == 'H':
+                holidays += record[1]
         
-        cursor.execute("SELECT basic FROM employee WHERE emp_id = %s", (emp_id,))
+        cursor.execute("SELECT basic FROM employee WHERE emp_id = ?", (emp_id,))
         result = cursor.fetchone()
         
         if result:
-            daily_rate = result['basic'] / 26
-            # Only deduct for unpaid leaves and absences, NOT for holidays
+            daily_rate = result[0] / 26
             total_deduction = (unpaid_leaves + absences) * daily_rate
         else:
             daily_rate = 0
@@ -972,7 +1055,7 @@ def calculate_monthly_deductions(emp_id, month, year):
             'daily_rate': daily_rate,
             'working_days': total_days
         }
-    except Error as e:
+    except Exception as e:
         print(f"Error calculating deductions: {e}")
         return {'unpaid_leaves': 0, 'absences': 0, 'holidays': 0, 'total_deduction': 0}
 
@@ -984,8 +1067,8 @@ def generate_payslip(emp_id, month, year):
         return None
     
     try:
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM employee WHERE emp_id = %s", (emp_id,))
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM employee WHERE emp_id = ?", (emp_id,))
         employee = cursor.fetchone()
         
         if not employee:
@@ -997,39 +1080,26 @@ def generate_payslip(emp_id, month, year):
         gross_salary = employee['basic']
         net_salary = gross_salary - deductions['total_deduction']
         
-        cursor.execute("""CREATE TABLE IF NOT EXISTS payslip (
-            payslip_id INT AUTO_INCREMENT PRIMARY KEY,
-            emp_id VARCHAR(50),
-            month INT,
-            year INT,
-            basic_salary DECIMAL(10,2),
-            unpaid_leaves INT,
-            absences INT,
-            holidays INT,
-            deduction_amount DECIMAL(10,2),
-            net_salary DECIMAL(10,2),
-            generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )""")
-        
+        # Check if payslip exists
         cursor.execute("""
-            SELECT * FROM payslip 
-            WHERE emp_id = %s AND month = %s AND year = %s
+            SELECT payslip_id FROM payslip 
+            WHERE emp_id = ? AND month = ? AND year = ?
         """, (emp_id, month, year))
         existing = cursor.fetchone()
         
         if existing:
             cursor.execute("""
                 UPDATE payslip 
-                SET basic_salary = %s, unpaid_leaves = %s, absences = %s, holidays = %s,
-                    deduction_amount = %s, net_salary = %s
-                WHERE payslip_id = %s
+                SET basic_salary = ?, unpaid_leaves = ?, absences = ?, holidays = ?,
+                    deduction_amount = ?, net_salary = ?
+                WHERE payslip_id = ?
             """, (gross_salary, deductions['unpaid_leaves'], deductions['absences'], deductions['holidays'],
-                  deductions['total_deduction'], net_salary, existing['payslip_id']))
+                  deductions['total_deduction'], net_salary, existing[0]))
         else:
             cursor.execute("""
                 INSERT INTO payslip 
                 (emp_id, month, year, basic_salary, unpaid_leaves, absences, holidays, deduction_amount, net_salary)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (emp_id, month, year, gross_salary, deductions['unpaid_leaves'],
                   deductions['absences'], deductions['holidays'], deductions['total_deduction'], net_salary))
         
@@ -1051,7 +1121,7 @@ def generate_payslip(emp_id, month, year):
             'net_salary': net_salary,
             'working_days': deductions['working_days']
         }
-    except Error as e:
+    except Exception as e:
         print(f"Error generating payslip: {e}")
         return None
 
@@ -1063,18 +1133,19 @@ def get_payslip(emp_id, month, year):
         return None
     
     try:
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
+        query = """
             SELECT p.*, e.emp_name, e.post 
             FROM payslip p
             JOIN employee e ON p.emp_id = e.emp_id
-            WHERE p.emp_id = %s AND p.month = %s AND p.year = %s
-        """, (emp_id, month, year))
+            WHERE p.emp_id = ? AND p.month = ? AND p.year = ?
+        """
+        cursor = conn.cursor()
+        cursor.execute(query, (emp_id, month, year))
         result = cursor.fetchone()
         cursor.close()
         conn.close()
-        return result
-    except Error as e:
+        return dict(result) if result else None
+    except Exception as e:
         print(f"Error getting payslip: {e}")
         return None
 
@@ -1086,29 +1157,12 @@ def get_all_payslips(emp_id=None):
         return pd.DataFrame()
     
     try:
-        cursor = conn.cursor()
-        cursor.execute("""CREATE TABLE IF NOT EXISTS payslip (
-            payslip_id INT AUTO_INCREMENT PRIMARY KEY,
-            emp_id VARCHAR(50),
-            month INT,
-            year INT,
-            basic_salary DECIMAL(10,2),
-            unpaid_leaves INT,
-            absences INT,
-            holidays INT,
-            deduction_amount DECIMAL(10,2),
-            net_salary DECIMAL(10,2),
-            generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )""")
-        conn.commit()
-        cursor.close()
-        
         if emp_id:
             query = """
                 SELECT p.*, e.emp_name, e.post 
                 FROM payslip p
                 JOIN employee e ON p.emp_id = e.emp_id
-                WHERE p.emp_id = %s
+                WHERE p.emp_id = ?
                 ORDER BY p.year DESC, p.month DESC
             """
             df = pd.read_sql(query, conn, params=(emp_id,))
@@ -1123,7 +1177,7 @@ def get_all_payslips(emp_id=None):
         
         conn.close()
         return df
-    except Error as e:
+    except Exception as e:
         print(f"Error getting payslips: {e}")
         return pd.DataFrame()
 
@@ -1138,20 +1192,15 @@ def add_holiday(holiday_name, holiday_date, description=""):
     
     try:
         cursor = conn.cursor()
-        cursor.execute("""CREATE TABLE IF NOT EXISTS holiday (
-            holiday_id INT AUTO_INCREMENT PRIMARY KEY,
-            holiday_name VARCHAR(255),
-            holiday_date DATE,
-            description TEXT
-        )""")
-        
-        query = "INSERT INTO holiday (holiday_name, holiday_date, description) VALUES (%s, %s, %s)"
-        cursor.execute(query, (holiday_name, holiday_date, description))
+        cursor.execute("""
+            INSERT INTO holiday (holiday_name, holiday_date, description)
+            VALUES (?, ?, ?)
+        """, (holiday_name, holiday_date, description))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error adding holiday: {e}")
         return False
 
@@ -1163,26 +1212,16 @@ def get_all_holidays(year=None):
         return pd.DataFrame()
     
     try:
-        cursor = conn.cursor()
-        cursor.execute("""CREATE TABLE IF NOT EXISTS holiday (
-            holiday_id INT AUTO_INCREMENT PRIMARY KEY,
-            holiday_name VARCHAR(255),
-            holiday_date DATE,
-            description TEXT
-        )""")
-        conn.commit()
-        cursor.close()
-        
         if year:
-            query = "SELECT * FROM holiday WHERE YEAR(holiday_date) = %s ORDER BY holiday_date"
-            df = pd.read_sql(query, conn, params=(year,))
+            query = "SELECT * FROM holiday WHERE strftime('%Y', holiday_date) = ? ORDER BY holiday_date"
+            df = pd.read_sql(query, conn, params=(str(year),))
         else:
             query = "SELECT * FROM holiday ORDER BY holiday_date"
             df = pd.read_sql(query, conn)
         
         conn.close()
         return df
-    except Error as e:
+    except Exception as e:
         print(f"Error getting holidays: {e}")
         return pd.DataFrame()
 
@@ -1195,13 +1234,12 @@ def delete_holiday(holiday_id):
     
     try:
         cursor = conn.cursor()
-        query = "DELETE FROM holiday WHERE holiday_id = %s"
-        cursor.execute(query, (holiday_id,))
+        cursor.execute("DELETE FROM holiday WHERE holiday_id = ?", (holiday_id,))
         conn.commit()
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error deleting holiday: {e}")
         return False
 
@@ -1214,12 +1252,12 @@ def is_holiday(check_date):
     
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM holiday WHERE holiday_date = %s", (check_date,))
+        cursor.execute("SELECT COUNT(*) FROM holiday WHERE holiday_date = ?", (check_date,))
         result = cursor.fetchone()
         cursor.close()
         conn.close()
         return result[0] > 0 if result else False
-    except Error as e:
+    except Exception as e:
         print(f"Error checking holiday: {e}")
         return False
 
@@ -1241,14 +1279,14 @@ def auto_mark_holidays():
             for holiday in holidays:
                 holiday_date = holiday[0]
                 cursor.execute(
-                    "SELECT COUNT(*) FROM attendance WHERE emp_id = %s AND curr_date = %s",
+                    "SELECT COUNT(*) FROM attendance WHERE emp_id = ? AND curr_date = ?",
                     (emp[0], holiday_date)
                 )
                 result = cursor.fetchone()
                 
                 if result[0] == 0:
                     cursor.execute(
-                        "INSERT INTO attendance (emp_id, curr_date, status) VALUES (%s, %s, 'H')",
+                        "INSERT INTO attendance (emp_id, curr_date, status) VALUES (?, ?, 'H')",
                         (emp[0], holiday_date)
                     )
         
@@ -1256,6 +1294,10 @@ def auto_mark_holidays():
         cursor.close()
         conn.close()
         return True
-    except Error as e:
+    except Exception as e:
         print(f"Error auto marking holidays: {e}")
         return False
+
+
+# Initialize database on module load
+init_database()
