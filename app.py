@@ -33,24 +33,269 @@ if 'success_message' not in st.session_state:
 if 'error_message' not in st.session_state:
     st.session_state.error_message = None
 
-# Custom CSS
+# Custom CSS - CRM Style
 st.markdown("""
 <style>
-    .stApp { background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%); min-height: 100vh; }
-    [data-testid="stSidebar"] { background: linear-gradient(180deg, #1a1a2e 0%, #0f0c29 100%); border-right: 1px solid #4a4a6a; }
-    .card { background: linear-gradient(145deg, rgba(30,30,63,0.9), rgba(37,37,80,0.9)); border-radius: 20px; padding: 25px; margin: 15px 0; border: 1px solid rgba(0,212,255,0.2); }
-    [data-testid="stMetricValue"] { font-size: 32px; color: #00d4ff; font-weight: 700; }
-    .stButton>button { background: linear-gradient(135deg, #00d4ff, #0099cc); border: none; border-radius: 12px; padding: 12px 30px; font-weight: 600; color: white; }
-    h1 { background: linear-gradient(135deg, #00d4ff, #00ff88); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .info-box { background: linear-gradient(135deg, rgba(30,30,63,0.9), rgba(37,37,80,0.9)); border-left: 4px solid #00d4ff; padding: 20px; border-radius: 0 15px 15px 0; margin: 15px 0; }
-    .profile-card { background: linear-gradient(145deg, rgba(30,30,63,0.9), rgba(37,37,80,0.9)); border-radius: 20px; padding: 25px; text-align: center; border: 1px solid rgba(0,212,255,0.3); }
-    .profile-avatar { width: 90px; height: 90px; border-radius: 50%; background: linear-gradient(135deg, #00d4ff, #00ff88); display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; font-size: 36px; color: white; font-weight: bold; }
-    .progress-bar { background: rgba(37,37,80,0.8); border-radius: 10px; height: 25px; overflow: hidden; }
-    .progress-fill { background: linear-gradient(90deg, #00d4ff, #00ff88); height: 100%; border-radius: 10px; }
-    .login-container { background: linear-gradient(145deg, rgba(30,30,63,0.95), rgba(37,37,80,0.95)); border-radius: 30px; padding: 50px; border: 1px solid rgba(0,212,255,0.3); box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
-    .feature-card { background: linear-gradient(145deg, rgba(30,30,63,0.9), rgba(37,37,80,0.9)); border-radius: 20px; padding: 25px; margin: 15px 0; border: 1px solid rgba(0,212,255,0.2); }
-    .hero-title { font-size: 56px; font-weight: 700; text-align: center; background: linear-gradient(135deg, #00d4ff, #00ff88); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .hero-subtitle { text-align: center; color: #a0a0c0; font-size: 20px; }
+    /* Main App Background */
+    .stApp { 
+        background: #f8f9fa; 
+        min-height: 100vh; 
+    }
+    
+    /* Sidebar */
+    [data-testid="stSidebar"] { 
+        background: #ffffff; 
+        border-right: 1px solid #e9ecef;
+        box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+    }
+    
+    /* Typography */
+    h1, h2, h3 {
+        color: #1a1a2e;
+        font-weight: 600;
+    }
+    
+    h1 { font-size: 28px; margin-bottom: 20px; }
+    h2 { font-size: 22px; margin-bottom: 15px; }
+    h3 { font-size: 18px; margin-bottom: 10px; }
+    
+    /* Cards - CRM Style */
+    .card { 
+        background: #ffffff; 
+        border-radius: 12px; 
+        padding: 24px; 
+        margin: 12px 0; 
+        border: 1px solid #e9ecef;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        transition: box-shadow 0.3s ease;
+    }
+    .card:hover {
+        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    }
+    
+    /* Metric Values */
+    [data-testid="stMetricValue"] { 
+        font-size: 28px; 
+        color: #1a1a2e; 
+        font-weight: 700; 
+    }
+    [data-testid="stMetricLabel"] {
+        color: #6c757d;
+        font-size: 14px;
+    }
+    
+    /* Buttons */
+    .stButton>button { 
+        background: #4361ee; 
+        border: none; 
+        border-radius: 8px; 
+        padding: 10px 24px; 
+        font-weight: 500; 
+        color: white;
+        transition: all 0.2s ease;
+    }
+    .stButton>button:hover {
+        background: #3730a3;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(67, 97, 238, 0.3);
+    }
+    
+    /* Info Box */
+    .info-box { 
+        background: #ffffff; 
+        border-left: 3px solid #4361ee; 
+        padding: 16px 20px; 
+        border-radius: 0 8px 8px 0; 
+        margin: 10px 0; 
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    
+    /* Profile Card */
+    .profile-card { 
+        background: #ffffff; 
+        border-radius: 12px; 
+        padding: 20px; 
+        text-align: center; 
+        border: 1px solid #e9ecef;
+    }
+    .profile-avatar { 
+        width: 72px; 
+        height: 72px; 
+        border-radius: 50%; 
+        background: linear-gradient(135deg, #4361ee, #7c3aed); 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        margin: 0 auto 12px; 
+        font-size: 24px; 
+        color: white; 
+        font-weight: 600;
+        box-shadow: 0 4px 12px rgba(67, 97, 238, 0.3);
+    }
+    
+    /* Progress Bar */
+    .progress-bar { 
+        background: #e9ecef; 
+        border-radius: 6px; 
+        height: 8px; 
+        overflow: hidden; 
+    }
+    .progress-fill { 
+        background: linear-gradient(90deg, #4361ee, #7c3aed); 
+        height: 100%; 
+        border-radius: 6px; 
+        transition: width 0.5s ease;
+    }
+    
+    /* Login Container */
+    .login-container { 
+        background: #ffffff; 
+        border-radius: 16px; 
+        padding: 40px; 
+        border: 1px solid #e9ecef; 
+        box-shadow: 0 8px 30px rgba(0,0,0,0.12); 
+    }
+    
+    /* Feature Card */
+    .feature-card { 
+        background: #ffffff; 
+        border-radius: 12px; 
+        padding: 20px; 
+        margin: 10px 0; 
+        border: 1px solid #e9ecef;
+        transition: all 0.3s ease;
+    }
+    .feature-card:hover {
+        border-color: #4361ee;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(67, 97, 238, 0.15);
+    }
+    
+    /* Hero */
+    .hero-title { 
+        font-size: 42px; 
+        font-weight: 700; 
+        text-align: center; 
+        color: #1a1a2e;
+    }
+    .hero-subtitle { 
+        text-align: center; 
+        color: #6c757d; 
+        font-size: 18px;
+        margin-bottom: 30px;
+    }
+    
+    /* Status Badges */
+    .status-badge {
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+    .status-complete { background: #d1fae5; color: #065f46; }
+    .status-progress { background: #fef3c7; color: #92400e; }
+    .status-pending { background: #e0e7ff; color: #3730a3; }
+    .status-absent { background: #fee2e2; color: #991b1b; }
+    .status-present { background: #d1fae5; color: #065f46; }
+    
+    /* Form Elements */
+    .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stSelectbox>div>div>div {
+        background: #ffffff;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+    }
+    .stTextInput>div>div>input:focus, .stTextArea>div>div>textarea:focus {
+        border-color: #4361ee;
+        box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.1);
+    }
+    
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 8px 16px;
+        font-weight: 500;
+    }
+    .stTabs [aria-selected="true"] {
+        background: #4361ee;
+        color: white;
+    }
+    
+    /* DataFrame */
+    [data-testid="stDataFrame"] {
+        background: #ffffff;
+        border-radius: 12px;
+        border: 1px solid #e9ecef;
+    }
+    
+    /* Sidebar Navigation Buttons */
+    [data-testid="stSidebar"] .stButton>button {
+        background: transparent;
+        color: #495057;
+        border: none;
+        text-align: left;
+        padding: 10px 16px;
+        border-radius: 8px;
+        font-weight: 500;
+    }
+    [data-testid="stSidebar"] .stButton>button:hover {
+        background: #f8f9fa;
+        color: #4361ee;
+        transform: none;
+        box-shadow: none;
+    }
+    
+    /* Notifications */
+    .notification {
+        background: #ffffff;
+        border-left: 3px solid #4361ee;
+        padding: 12px 16px;
+        border-radius: 0 8px 8px 0;
+        margin: 8px 0;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    
+    /* Success/Error Messages */
+    [data-testid="stSuccess"] {
+        background: #d1fae5;
+        color: #065f46;
+        border-radius: 8px;
+        border: none;
+    }
+    [data-testid="stError"] {
+        background: #fee2e2;
+        color: #991b1b;
+        border-radius: 8px;
+        border: none;
+    }
+    [data-testid="stInfo"] {
+        background: #e0e7ff;
+        color: #3730a3;
+        border-radius: 8px;
+        border: none;
+    }
+    
+    /* Divider */
+    hr {
+        border: none;
+        border-top: 1px solid #e9ecef;
+        margin: 20px 0;
+    }
+    
+    /* Welcome text */
+    .welcome-text {
+        color: #1a1a2e;
+        font-size: 24px;
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+    .welcome-subtext {
+        color: #6c757d;
+        font-size: 14px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
